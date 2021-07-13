@@ -1,0 +1,179 @@
+# Welcome to Serverless!
+#
+# This file is the main config file for your service.
+# It's very minimal at this point and uses default values.
+# You can always add more config options for more control.
+# We've included some commented out config examples here.
+# Just uncomment any of them to get that config option.
+#
+# For full config options, check the docs:
+#    docs.serverless.com
+#
+# Happy Coding!
+
+service: nomadland-resources
+
+provider:
+  name: aws
+  profile: nomadland
+  stage: ${opt:stage, 'dev'}
+
+resources:
+  Resources:
+    DynamoTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
+      Properties:
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        AttributeDefinitions:
+          - AttributeName: pk
+            AttributeType: S
+          - AttributeName: sk
+            AttributeType: S
+          - AttributeName: data
+            AttributeType: S
+        KeySchema:
+          - AttributeName: pk
+            KeyType: HASH
+          - AttributeName: sk
+            KeyType: RANGE
+        BillingMode: PAY_PER_REQUEST
+        GlobalSecondaryIndexes:
+          - IndexName: 'sk-data-index'
+            Projection:
+              ProjectionType: ALL
+            KeySchema:
+              - AttributeName: sk
+                KeyType: HASH
+              - AttributeName: data
+                KeyType: RANGE
+    UserPool:
+      Type: AWS::Cognito::UserPool
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
+      Properties:
+        AdminCreateUserConfig:
+          AllowAdminCreateUserOnly: false
+        AccountRecoverySetting:
+          RecoveryMechanisms:
+            - Name: verified_email
+              Priority: 1
+        AutoVerifiedAttributes:
+          - email
+        UserPoolName: UserPool-${self:provider.stage}
+        UsernameConfiguration:
+          CaseSensitive: false
+        EmailConfiguration:
+          EmailSendingAccount: DEVELOPER
+          From: david@barrickapps.com
+          SourceArn: arn:aws:ses:us-east-1:969654823746:identity/david@barrickapps.com
+        Policies:
+          PasswordPolicy:
+            MinimumLength: 8
+            RequireLowercase: false
+            RequireNumbers: false
+            RequireSymbols: false
+            RequireUppercase: false
+        UsernameAttributes:
+          - email
+    UserPoolWebClient:
+      Type: AWS::Cognito::UserPoolClient
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
+      Properties:
+        ClientName: UserPoolWebClient-${self:provider.stage}
+        GenerateSecret: false
+        UserPoolId: !Ref UserPool
+        ExplicitAuthFlows:
+          - ALLOW_REFRESH_TOKEN_AUTH
+          - ALLOW_USER_PASSWORD_AUTH
+          - ALLOW_USER_SRP_AUTH
+          - ALLOW_ADMIN_USER_PASSWORD_AUTH
+        PreventUserExistenceErrors: ENABLED
+    S3BucketRoot:
+      Type: AWS::S3::Bucket
+      DeletionPolicy: Delete
+      Properties:
+        AccessControl: PublicRead
+        BucketName: 'noamdland.barrickapps.com'
+        WebsiteConfiguration:
+          ErrorDocument: '404.html'
+          IndexDocument: 'index.html'
+    S3BucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        Bucket: !Ref S3BucketRoot
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: 'Allow'
+              Action: 's3:GetObject'
+              Principal: '*'
+              Resource: arn:aws:s3:::nomadland.barrickapps.com/*
+
+    CFDistribution:
+      Type: AWS::CloudFront::Distribution
+      Properties:
+        DistributionConfig:
+          Aliases:
+            - ${self:custom.S3_BUCKET}
+          CustomErrorResponses:
+            - ErrorCachingMinTTL: 60
+              ErrorCode: 404
+              ResponseCode: 200
+              ResponsePagePath: '/index.html'
+          DefaultCacheBehavior:
+            AllowedMethods:
+              - GET
+              - HEAD
+            CachedMethods:
+              - GET
+              - HEAD
+            Compress: true
+            DefaultTTL: 86400
+            ForwardedValues:
+              Cookies:
+                Forward: none
+              QueryString: true
+            MaxTTL: 31536000
+            TargetOriginId: !Sub 'S3-${AWS::StackName}-root'
+            ViewerProtocolPolicy: 'redirect-to-https'
+          DefaultRootObject: index.html
+          Enabled: true
+          Origins:
+            - S3OriginConfig:
+                OriginAccessIdentity: ''
+              DomainName: !GetAtt S3BucketRoot.DomainName
+              Id: !Sub 'S3-${AWS::StackName}-root'
+          ViewerCertificate:
+            AcmCertificateArn: ${self:custom.ACM_CERTIFICATE_ARN}
+            SslSupportMethod: sni-only
+
+  Outputs:
+    DynamoTable:
+      Value:
+        Ref: DynamoTable
+      Export:
+        Name: Nomadland-DynamoTable-${self:provider.stage}
+    DynamoTableArn:
+      Value:
+        Fn::GetAtt: [DynamoTable, Arn]
+      Export:
+        Name: Nomadland-DynamoTable-Arn-${self:provider.stage}
+    UserPool:
+      Value:
+        Ref: UserPool
+      Export:
+        Name: Nomadland-UserPool-${self:provider.stage}
+    UserPoolArn:
+      Value:
+        Fn::GetAtt: [UserPool, Arn]
+      Export:
+        Name: Nomadland-UserPool-Arn-${self:provider.stage}
+    UserPoolWebClient:
+      Value:
+        Ref: UserPoolWebClient
+      Export:
+        Name: Nomadland-UserPool-Web-Client-${self:provider.stage}

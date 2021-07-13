@@ -1,0 +1,121 @@
+# Welcome to Serverless!
+#
+# This file is the main config file for your service.
+# It's very minimal at this point and uses default values.
+# You can always add more config options for more control.
+# We've included some commented out config examples here.
+# Just uncomment any of them to get that config option.
+#
+# For full config options, check the docs:
+#    docs.serverless.com
+#
+# Happy Coding!
+
+service: nomadland-api
+
+custom:
+  TABLE_NAME: ${cf:nomadland-resources-${self:provider.stage}.DynamoTable}
+  TABLE_ARN: ${cf:nomadland-resources-${self:provider.stage}.DynamoTableArn}
+  HEADERS:
+    - 'nomadland-user'
+    - 'Access-Control-Allow-Origin'
+    - 'content-type'
+    - 'x-api-key'
+provider:
+  name: aws
+  runtime: nodejs12.x
+  profile: nomadland
+  stage: ${opt:stage, 'dev'}
+  apiKeys:
+    - nomadland-api-key-${opt:stage, 'dev'}
+  memorySize: 1024 # optional, in MB, default is 1024
+  timeout: 30
+  environment:
+    TABLE_NAME: ${self:custom.TABLE_NAME}
+  tracing:
+    lambda: true
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:*
+      Resource:
+        - ${self:custom.TABLE_ARN}*
+
+functions:
+  createUser:
+    handler: tasks/createUser.handler
+    events:
+      - http:
+          path: users
+          method: post
+          private: true
+          cors:
+            origin: '*'
+            headers: ${self:custom.HEADERS}
+            allowCredentials: false
+  createTrip:
+    handler: tasks/createTrip.handler
+    events:
+      - http:
+          path: trips
+          method: post
+          private: true
+          cors:
+            origin: '*'
+            headers: ${self:custom.HEADERS}
+            allowCredentials: false
+  fetchTrips:
+    handler: tasks/fetchTrips.handler
+    events:
+      - http:
+          path: trips
+          method: get
+          private: true
+          cors:
+            origin: '*'
+            headers: ${self:custom.HEADERS}
+            allowCredentials: false
+  fetchTrip:
+    handler: tasks/fetchTrip.handler
+    events:
+      - http:
+          path: trips/{trip_id}
+          method: get
+          private: true
+          cors:
+            origin: '*'
+            headers: ${self:custom.HEADERS}
+            allowCredentials: false
+  signIn:
+    handler: tasks/signIn.handler
+    events:
+      - http:
+          path: signin
+          method: post
+          private: true
+          cors:
+            origin: '*'
+            headers: ${self:custom.HEADERS}
+            allowCredentials: false
+  createBooking:
+    handler: tasks/createBooking.handler
+    events:
+      - http:
+          path: bookings
+          method: post
+          private: true
+          cors:
+            origin: '*'
+            headers: ${self:custom.HEADERS}
+            allowCredentials: false
+  createReccomendation:
+    handler: tasks/createReccomendation.handler
+    events:
+      - http:
+          path: reccomendations
+          method: post
+          private: true
+          cors:
+            origin: '*'
+            headers: ${self:custom.HEADERS}
+            allowCredentials: false
